@@ -1,17 +1,32 @@
-# app_adocao
+# Meclaz Pets — aplicativo Flutter
 
-A new Flutter project.
+Aplicativo móvel para visualizar animais disponíveis e enviar pedidos de adoção à API Dart/PostgreSQL.
 
-## Getting Started
+## Executar no Android Emulator
 
-This project is a starting point for a Flutter application.
+1. Inicie o PostgreSQL, crie o banco e aplique `api_adocao/schema.sql` (veja o README da API).
+2. Inicie a API a partir da pasta `api_adocao` com `dart run bin/api_adocao.dart`.
+3. No emulador, `10.0.2.2` aponta para o computador host. Esse é o endereço padrão do app.
+4. Na pasta `app_adocao`, rode:
 
-A few resources to get you started if this is your first Flutter project:
+```powershell
+flutter pub get
+flutter run
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Executar em celular físico
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Conecte o celular e o computador à mesma rede Wi-Fi, permita a porta TCP `8080` no firewall do computador e descubra o IP local do computador. Rode:
+
+```powershell
+flutter run --dart-define=API_HOST=192.168.0.10
+```
+
+Troque `192.168.0.10` pelo IP real do computador. O servidor precisa estar ativo enquanto o app usa a API.
+
+## Fluxo disponível
+
+- Carrega apenas animais disponíveis e permite atualizar a lista.
+- O botão **Adotar** solicita nome e e-mail/telefone.
+- Envia um pedido à rota `POST /solicitacoes` e informa sucesso ou erro.
+- A API valida se o animal ainda está disponível; pedidos aceitos ficam com status `pendente` no banco.
