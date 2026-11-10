@@ -1,4 +1,4 @@
-# 🐾 Meclaz Pets
+# Meclaz Pets
 
 Aplicativo de adoção de animais desenvolvido com Flutter, Dart e PostgreSQL.
 
@@ -8,7 +8,7 @@ O sistema possui uma API REST própria, responsável pela comunicação entre o 
 
 ---
 
-## 📌 Funcionalidades
+## Funcionalidades
 
 - Visualização de animais disponíveis para adoção.
 - Cadastro de animais realizado exclusivamente por administradores.
@@ -19,7 +19,7 @@ O sistema possui uma API REST própria, responsável pela comunicação entre o 
 - API REST para integração com outros aplicativos.
 - Documentação dos endpoints dentro do aplicativo.
 
-## 🛠️ Tecnologias utilizadas
+## Tecnologias utilizadas
 
 | Tecnologia | Utilização |
 |---|---|
@@ -33,7 +33,7 @@ O sistema possui uma API REST própria, responsável pela comunicação entre o 
 
 ---
 
-# 📁 1. Estrutura do projeto
+# 1. Estrutura do projeto
 
 ```text
 meclaz_pets/
@@ -68,7 +68,7 @@ meclaz_pets/
 
 ---
 
-# 💻 2. Requisitos para executar o projeto
+# 2. Requisitos para executar o projeto
 
 Antes de começar, instale os seguintes programas:
 
@@ -90,7 +90,7 @@ dart --version
 
 ---
 
-# 📥 3. Baixar o projeto
+# 3. Baixar o projeto
 
 Abra o PowerShell e execute:
 
@@ -108,7 +108,7 @@ O repositório contém duas partes: a API e o aplicativo Flutter.
 
 ---
 
-# 🗄️ 4. Configuração do banco de dados PostgreSQL
+# 4. Configuração do banco de dados PostgreSQL
 
 Esta etapa é muito importante!
 
@@ -253,7 +253,7 @@ Se elas não aparecerem imediatamente, clique com o botão direito em Tables e s
 
 ---
 
-# 🔐 5. Cadastrar administradores
+# 5. Cadastrar administradores
 
 Depois de criar as três tabelas, é possível cadastrar os usuários que terão acesso à área administrativa.
 
@@ -298,7 +298,7 @@ Cada integrante terá seu próprio e-mail e senha.
 
 ---
 
-# ⚙️ 6. Configurar e iniciar a API
+# 6. Configurar e iniciar a API
 
 A API é responsável por conectar o aplicativo ao PostgreSQL.
 
@@ -511,7 +511,7 @@ O animal precisa existir e estar disponível para adoção.
 
 ---
 
-# 👥 10. Desenvolvimento em equipe
+# 10. Desenvolvimento em equipe
 
 O código-fonte está disponível no GitHub:
 
@@ -540,7 +540,7 @@ Para todos utilizarem os mesmos animais e solicitações simultaneamente, será 
 
 ---
 
-# ⚠️ 11. Problemas comuns
+# 11. Problemas comuns
 
 ### Erro: porta 8080 ocupada
 
@@ -590,7 +590,7 @@ Confira se:
 
 ---
 
-# 🔒 12. Segurança
+# 12. Segurança
 
 - Não compartilhe senhas do PostgreSQL.
 - Não publique chaves JWT.
@@ -601,6 +601,6 @@ Confira se:
 
 ---
 
-## 🐾 Meclaz Pets
+## Meclaz Pets
 
 **Conectando animais a novos lares.**
