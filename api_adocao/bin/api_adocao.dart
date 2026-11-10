@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:postgres/postgres.dart';
+import 'package:bcrypt/bcrypt.dart';
+import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 
-// Lê o JSON enviado pelo aplicativo ou pelo PowerShell.
 Future<Map<String, dynamic>> lerDados(HttpRequest requisicao) async {
   final texto = await utf8.decoder.bind(requisicao).join();
   final dados = jsonDecode(texto);
@@ -15,7 +16,6 @@ Future<Map<String, dynamic>> lerDados(HttpRequest requisicao) async {
   return dados;
 }
 
-// Confere se um campo de texto foi preenchido.
 String validarTexto(
   Map<String, dynamic> dados,
   String campo,
@@ -36,41 +36,82 @@ String validarTexto(
   return valor.trim();
 }
 
+// Verifica se o token pertence a um administrador ativo.
+Future<bool> ehAdministrador(
+  HttpRequest requisicao,
+  Connection conexao,
+  String segredo,
+) async {
+  try {
+    final autorizacao = requisicao.headers.value(
+      HttpHeaders.authorizationHeader,
+    );
+
+    if (autorizacao == null || !autorizacao.startsWith('Bearer ')) {
+      return false;
+    }
+
+    final token = autorizacao.substring(7);
+    final jwt = JWT.verify(token, SecretKey(segredo));
+    final payload = jwt.payload;
+
+    if (payload is! Map || payload['id'] is! num) {
+      return false;
+    }
+
+    final resultado = await conexao.execute(
+      Sql.named('''
+        SELECT id
+        FROM usuarios
+        WHERE id = @id
+          AND tipo = 'admin'
+          AND ativo = TRUE
+      '''),
+      parameters: {'id': (payload['id'] as num).toInt()},
+    );
+
+    return resultado.isNotEmpty;
+  } catch (_) {
+    return false;
+  }
+}
+
 Future<void> main() async {
+  final segredo = Platform.environment['JWT_SECRET'];
+
+  if (segredo == null || segredo.length < 32) {
+    print('Configure a variável JWT_SECRET com pelo menos 32 caracteres.');
+    return;
+  }
+
   stdout.write('Digite a senha do PostgreSQL: ');
 
   stdin.echoMode = false;
-  String? senha;
+  String? senhaBanco;
 
   try {
-    senha = stdin.readLineSync();
+    senhaBanco = stdin.readLineSync();
   } finally {
     stdin.echoMode = true;
     stdout.writeln();
   }
 
-  // Conecta ao PostgreSQL instalado neste computador.
   final conexao = await Connection.open(
     Endpoint(
       host: 'localhost',
       port: 5432,
       database: 'meclaz_pets',
       username: 'postgres',
-      password: senha,
+      password: senhaBanco,
     ),
-    settings: ConnectionSettings(
-      sslMode: SslMode.disable,
-    ),
+    settings: const ConnectionSettings(sslMode: SslMode.disable),
   );
 
   try {
-    final servidor = await HttpServer.bind(
-  InternetAddress.anyIPv4,
-  8080,
-);
+    final servidor = await HttpServer.bind(InternetAddress.anyIPv4, 8080);
 
     print('Conectado ao PostgreSQL!');
-    print('API rodando em http://127.0.0.1:8080/animais');
+    print('API rodando em http://127.0.0.1:8080');
 
     await for (final requisicao in servidor) {
       final resposta = requisicao.response;
@@ -80,8 +121,65 @@ Future<void> main() async {
         final caminho = requisicao.uri.path;
         final metodo = requisicao.method;
 
-        if (caminho == '/animais' && metodo == 'GET') {
-          // Consulta todos os animais ou somente os disponíveis.
+        // LOGIN DOS ADMINISTRADORES
+        if (caminho == '/login' && metodo == 'POST') {
+          final dados = await lerDados(requisicao);
+
+          final email = validarTexto(dados, 'email', 150).toLowerCase();
+          final senha = validarTexto(dados, 'senha', 100);
+
+          final resultado = await conexao.execute(
+            Sql.named('''
+              SELECT id, nome, email, senha_hash
+              FROM usuarios
+              WHERE email = @email
+                AND tipo = 'admin'
+                AND ativo = TRUE
+            '''),
+            parameters: {'email': email},
+          );
+
+          if (resultado.isEmpty) {
+            resposta.statusCode = HttpStatus.unauthorized;
+            resposta.write(jsonEncode({'erro': 'E-mail ou senha incorretos.'}));
+          } else {
+            final usuario = resultado.first.toColumnMap();
+            final senhaCorreta = BCrypt.checkpw(
+              senha,
+              usuario['senha_hash'] as String,
+            );
+
+            if (!senhaCorreta) {
+              resposta.statusCode = HttpStatus.unauthorized;
+              resposta.write(
+                jsonEncode({'erro': 'E-mail ou senha incorretos.'}),
+              );
+            } else {
+              final agora = DateTime.now().toUtc();
+              final expiracao = agora.add(const Duration(hours: 8));
+
+              final token = JWT({
+                'id': usuario['id'],
+                'email': usuario['email'],
+                'exp': expiracao.millisecondsSinceEpoch ~/ 1000,
+              }).sign(SecretKey(segredo));
+
+              resposta.write(
+                jsonEncode({
+                  'mensagem': 'Login realizado com sucesso!',
+                  'token': token,
+                  'usuario': {
+                    'id': usuario['id'],
+                    'nome': usuario['nome'],
+                    'email': usuario['email'],
+                  },
+                }),
+              );
+            }
+          }
+        }
+        // CONSULTAR ANIMAIS
+        else if (caminho == '/animais' && metodo == 'GET') {
           final apenasDisponiveis =
               requisicao.uri.queryParameters['disponivel'] == 'true';
 
@@ -96,56 +194,63 @@ Future<void> main() async {
               .toList();
 
           resposta.write(jsonEncode(animais));
-        } else if (caminho == '/animais' && metodo == 'POST') {
-          final dados = await lerDados(requisicao);
+        }
+        // CADASTRAR ANIMAL - SOMENTE ADMINISTRADOR
+        else if (caminho == '/animais' && metodo == 'POST') {
+          final autorizado = await ehAdministrador(
+            requisicao,
+            conexao,
+            segredo,
+          );
 
-          final nome = validarTexto(dados, 'nome', 100);
-          final especie = validarTexto(dados, 'especie', 50);
-          final idade = dados['idade_em_meses'];
-
-          if (idade is! int || idade < 0 || idade > 2147483647) {
-            throw const FormatException(
-              'Informe uma idade em meses válida, inteira e não negativa.',
+          if (!autorizado) {
+            resposta.statusCode = HttpStatus.forbidden;
+            resposta.write(
+              jsonEncode({
+                'erro': 'Acesso negado. Faça login como administrador.',
+              }),
             );
+          } else {
+            final dados = await lerDados(requisicao);
+
+            final nome = validarTexto(dados, 'nome', 100);
+            final especie = validarTexto(dados, 'especie', 50);
+            final idade = dados['idade_em_meses'];
+
+            if (idade is! int || idade < 0) {
+              throw const FormatException('Informe uma idade em meses válida.');
+            }
+
+            final resultado = await conexao.execute(
+              Sql.named('''
+                INSERT INTO animais (
+                  nome,
+                  especie,
+                  idade_em_meses,
+                  disponivel
+                )
+                VALUES (@nome, @especie, @idade, TRUE)
+                RETURNING *
+              '''),
+              parameters: {'nome': nome, 'especie': especie, 'idade': idade},
+            );
+
+            resposta.statusCode = HttpStatus.created;
+            resposta.write(jsonEncode(resultado.first.toColumnMap()));
           }
-
-          // O banco gera o ID e devolve o animal cadastrado.
-          final resultado = await conexao.execute(
-            Sql.named('''
-              INSERT INTO animais (
-                nome,
-                especie,
-                idade_em_meses,
-                disponivel
-              )
-              VALUES (@nome, @especie, @idade, TRUE)
-              RETURNING *
-            '''),
-            parameters: {
-              'nome': nome,
-              'especie': especie,
-              'idade': idade,
-            },
-          );
-
-          resposta.statusCode = HttpStatus.created;
-          resposta.write(
-            jsonEncode(resultado.first.toColumnMap()),
-          );
-        } else if (caminho == '/solicitacoes' && metodo == 'POST') {
+        }
+        // SOLICITAR ADOÇÃO
+        else if (caminho == '/solicitacoes' && metodo == 'POST') {
           final dados = await lerDados(requisicao);
 
           final animalId = dados['animal_id'];
           final nome = validarTexto(dados, 'nome_interessado', 100);
           final contato = validarTexto(dados, 'contato', 150);
 
-          if (animalId is! int ||
-              animalId <= 0 ||
-              animalId > 2147483647) {
+          if (animalId is! int || animalId <= 0) {
             throw const FormatException('Informe um ID de animal válido.');
           }
 
-          // Registra o pedido apenas se o animal estiver disponível.
           final resultado = await conexao.execute(
             Sql.named('''
               INSERT INTO solicitacoes (
@@ -173,31 +278,21 @@ Future<void> main() async {
           }
 
           resposta.statusCode = HttpStatus.created;
-          resposta.write(
-            jsonEncode(resultado.first.toColumnMap()),
-          );
-        } else if (caminho == '/animais' ||
-            caminho == '/solicitacoes') {
-          resposta.statusCode = HttpStatus.methodNotAllowed;
-          resposta.headers.set(
-            'Allow',
-            caminho == '/animais' ? 'GET, POST' : 'POST',
-          );
-
-          resposta.write(
-            jsonEncode({'erro': 'Método não permitido nesta rota.'}),
-          );
-        } else {
+          resposta.write(jsonEncode(resultado.first.toColumnMap()));
+        }
+        // ROTAS OU MÉTODOS NÃO EXISTENTES
+        else {
           resposta.statusCode = HttpStatus.notFound;
           resposta.write(
-            jsonEncode({'erro': 'Rota não encontrada.'}),
+            jsonEncode({
+              'erro': 'Rota não encontrada ou método não permitido.',
+            }),
           );
         }
       } on FormatException catch (erro) {
         resposta.statusCode = HttpStatus.badRequest;
         resposta.write(jsonEncode({'erro': erro.message}));
       } catch (erro) {
-        // Exibe os detalhes no terminal para ajudar no diagnóstico.
         stderr.writeln('Erro ao atender requisição: $erro');
 
         resposta.statusCode = HttpStatus.internalServerError;
