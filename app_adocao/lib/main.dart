@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'cadastro_animal_page.dart';
 
 
 const ipDoComputador = '127.0.0.1';
@@ -83,7 +84,30 @@ class _AnimaisDisponiveisPageState extends State<AnimaisDisponiveisPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
+  floatingActionButton: FloatingActionButton.extended(
+    backgroundColor: const Color(0xFFAA4022),
+    foregroundColor: Colors.white,
+    icon: const Icon(Icons.add),
+    label: const Text('Cadastrar animal'),
+    onPressed: () async {
+      final cadastrado = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CadastroAnimalPage(
+            endereco: Uri.http('$ipDoComputador:8080', '/animais'),
+          ),
+        ),
+      );
+
+      if (!mounted || cadastrado != true) return;
+
+      atualizarLista();
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        const SnackBar(content: Text('Animal cadastrado com sucesso!')),
+      );
+    },
+  ),
+  body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
@@ -172,7 +196,7 @@ class _AnimaisDisponiveisPageState extends State<AnimaisDisponiveisPage> {
                         }
 
                         return ListView.separated(
-                          padding: const EdgeInsets.only(bottom: 24),
+                          padding: const EdgeInsets.only(bottom: 96),
                           itemCount: animais.length,
                           separatorBuilder: (context, indice) =>
                               const SizedBox(height: 12),
